@@ -13,6 +13,7 @@ The intended audience of this document is any service who wants to onboard to Az
 3. [Resource API Reference](v1.0/resource-api-reference.md) <br/>
 4. [Proxy API Reference](v1.0/proxy-api-reference.md)
 5. [Addendum](v1.0/Addendum.md)
+6. [Breaking change guidelines](v1.0/version-change.md)
 
 ## Code of Conduct
 This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact opencode@microsoft.com with any additional questions or comments.
