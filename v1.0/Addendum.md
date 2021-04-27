@@ -115,12 +115,20 @@ Some REST operations can take a long time to complete. Although REST is not supp
 
 The API flow for PUT should be to:
 
-1. Respond to the initial PUT request with a 201 Created or 200 OK (per normal guidance)
-2. Since provisioning is not complete, the PUT response body **MUST** contain a provisioningState set to a non-terminal value (e.g. &quot;Accepted&quot;, or &quot;Created&quot;)
-3. **Optional** : The response headers may include a Azure-AsyncOperation header pointing to an Operation resource (as described below)
-4. Future GETs on the resource that was created should continue to return a 200 Status Code and provisioningState field that is \*non-terminal\* as long as the provisioning is in progress
+1. Respond to the initial PUT request with a 202 Accepted.
+2. The response headers **MUST** include a Location header that points to a URL where the ongoing operation can be monitored.
+3. **Optional:** The response headers may include an Azure-AsyncOperation header pointing to an Operation resource (as described below).
+4. Future GETs on the resource that was created should continue to return a 200 Status Code and provisioningState field that is \*non-terminal\* as long as the provisioning is in progress.
 5. After the provisioning completes, the provisioningState field should transition to one of the terminal states (as described below).
 6. The provisioningState field should be returned on all future GETs, even after it is complete, until some other operation (e.g. a DELETE or UPDATE) causes it to transition to a non-terminal state.
+
+The RFC7231 dictates that PUT must be idempotent and the client might be retrying from a network or client-side error. In order to increase odds of deployments to eventually succeed, the server should avoid starting the operation again if it already started. This can be performed by comparing the content of PUT request with the goal state of an ongoing operation. If it matches, the server should not start a new asynchronous operation. Instead it may immediately return 202 Accepted, with the same or compatible values in the Location header and in the optional Azure-AsyncOperation header of the initial PUT request.
+
+The PUT operation should return 200 OK if the current state already matches the state specified in the content of PUT request, AND there is no ongoing operation that would change that state. This reduces deployment times and improves odds for success. The PUT operation may (but is not required to) return 200 OK for cases when the operation can be finished in a timely fashion, such as when the user is updating tags or other informational properties. Whenever PUT operation returns 200 OK for a final state, the response **MUST NOT** include the Location header, and neither the Azure-AsyncOperation header.
+
+If there is an ongoing operation with a goal state that does not match the one specified in the content of PUT request, the server may immediately return a 409 Conflict without doing any change in the resource, or it may cancel the previous operation and start a new one, returning 202 Accepted with new headers or 200 OK if finished synchronously. In case the previous operation is cancelled, the response of GET on URIs specified in the Location header and, optionally, in the Azure-AsyncOperation header of the previous PUT operation, must reflect the cancellation.
+
+**IMPOTANT:** Previous versions of this document stated that PUT could return 200 OK with a non-final provisioning state and the Azure-AsyncOperation header. It is therefore recommended that whenever a client sees a 200 OK, it should check for the presence of Azure-AsyncOperation header. If the header is present, the client must assume that the operation did not finish and start polling the URI from that header.
 
 ### Updating using PATCH ###
 
@@ -131,6 +139,8 @@ The API flow for PATCH on an existing resource should be to:
 3. **Optional:** The response headers may include an Azure-AsyncOperation header pointing to an Operation resource (as described below).
 4. If a provisioningState field is used for the resource, it **MUST** transition to a non-terminal state like &quot;Updating&quot;
 5. If the PATCH completes successfully, the URL that was returned in the Location header **MUST** now return what would have been a successful response if the API completed (e.g. a response body / header / status code).
+
+The PATCH operation may also return 200 OK or 409 Conflict in certain cases. Please see guidance of PUT operation for details.
 
 ## Delete Resource Asynchronously ##
 
