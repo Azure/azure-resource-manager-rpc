@@ -122,11 +122,11 @@ The API flow for PUT should be to:
 5. After the provisioning completes, the provisioningState field should transition to one of the terminal states (as described below).
 6. The provisioningState field should be returned on all future GETs, even after it is complete, until some other operation (e.g. a DELETE or UPDATE) causes it to transition to a non-terminal state.
 
-The RFC7231 dictates that PUT must be idempotent and the client might be retrying from a network or client-side error. In order to increase odds of deployments to eventually succeed, the server should avoid starting the operation again if it already started. This can be performed by comparing the content of PUT request with the goal state of an ongoing operation. If it matches, the server should not start a new asynchronous operation. Instead it may immediately return 202 Accepted, with the same or compatible values in the Location header and in the optional Azure-AsyncOperation header of the initial PUT request.
+The PUT operation should return 200 OK if the current state already matches the state specified in the content of PUT request, AND there is no ongoing operation that would change that state. This reduces deployment times and improves odds of success. The PUT operation may (but is not required to) return 200 OK for cases when the operation can be finished in a timely fashion, such as when the user is updating tags or other informational properties. Whenever PUT operation returns 200 OK for a final state, the response **MUST NOT** include the Location header, and neither the Azure-AsyncOperation header. The only exception for this is compatibility with old clients that expect that header (see the important note below).
 
-The PUT operation should return 200 OK if the current state already matches the state specified in the content of PUT request, AND there is no ongoing operation that would change that state. This reduces deployment times and improves odds for success. The PUT operation may (but is not required to) return 200 OK for cases when the operation can be finished in a timely fashion, such as when the user is updating tags or other informational properties. Whenever PUT operation returns 200 OK for a final state, the response **MUST NOT** include the Location header, and neither the Azure-AsyncOperation header.
+The RFC7231 dictates that PUT must be idempotent and the client might be retrying from a network or client-side error. In order to increase odds of success, the server should avoid starting the operation again if it already started. This can be performed by comparing the content of PUT request with the goal state of the ongoing operation. If it matches, the server should not start a new asynchronous operation. Instead it may immediately return 202 Accepted, with the same or compatible values in the Location header and in the optional Azure-AsyncOperation header of the initial PUT request. It is valid to give same polling URIs to different clients, provided they requested the same operation.
 
-If there is an ongoing operation with a goal state that does not match the one specified in the content of PUT request, the server may immediately return a 409 Conflict without doing any change in the resource, or it may cancel the previous operation and start a new one, returning 202 Accepted with new headers or 200 OK if finished synchronously. In case the previous operation is cancelled, the response of GET on URIs specified in the Location header and, optionally, in the Azure-AsyncOperation header of the previous PUT operation, must reflect the cancellation.
+The server must never have more than one ongoing PUT operation for a given resource. If there is an ongoing operation with a goal state that does not match the one specified in the content of PUT request, the server should immediately return a 409 Conflict without doing any change. Similarly, if the server receives PUT request while there is an ongoing DELETE operation, the server should return 409 Conflict immediately.
 
 **IMPOTANT:** Previous versions of this document stated that PUT could return 200 OK with a non-final provisioning state and the Azure-AsyncOperation header. It is therefore recommended that whenever a client sees a 200 OK, it should check for the presence of Azure-AsyncOperation header. If the header is present, the client must assume that the operation did not finish and start polling the URI from that header.
 
@@ -134,32 +134,48 @@ If there is an ongoing operation with a goal state that does not match the one s
 
 The API flow for PATCH on an existing resource should be to:
 
-1. Respond to the initial PATCH request with a 202 Accepted
-2. The response headers **MUST** include a Location header that points to a URL where the ongoing operation can be monitored
+1. Respond to the initial PATCH request with a 202 Accepted.
+2. The response headers **MUST** include a Location header that points to a URL where the ongoing operation can be monitored.
 3. **Optional:** The response headers may include an Azure-AsyncOperation header pointing to an Operation resource (as described below).
-4. If a provisioningState field is used for the resource, it **MUST** transition to a non-terminal state like &quot;Updating&quot;
+4. If a provisioningState field is used for the resource, it **MUST** transition to a non-terminal state like &quot;Updating&quot;.
 5. If the PATCH completes successfully, the URL that was returned in the Location header **MUST** now return what would have been a successful response if the API completed (e.g. a response body / header / status code).
 
-The PATCH operation may also return 200 OK or 409 Conflict in certain cases. Please see guidance of PUT operation for details.
+The PATCH operation may also return 200 OK or 409 Conflict in certain cases. See guidance of PUT operation for details.
+
+Different than PUT, the server may allow multiple ongoing PATCH operations, provided they are changing different properties of the resource. In other words, multiple ongoing operations are allowed as long as they do not cause conflicts between each other. Note that this requires the server to compare goal states of different PATCH requests and ensure no interference between requests. It is typically simpler to just return 409 Conflict whenever there is another ongoing operation.
+
+While RFC7231 does not require PATCH to be idempotent, PATCH operations typically use same payload of PUT. The main difference is that in PATCH, the client doesn't want to change absent properties, while in PUT, absent properties should be reset to server default value. With this usage, PATCH can be idempotent and it is recommended that the server does this way.
 
 ## Delete Resource Asynchronously ##
 
 The API flow should be to:
 
-1. Respond to the initial DELETE request with a 202 Accepted
-2. The response headers **MUST** include a Location header that points to a URL where the ongoing operation can be monitored
+1. Respond to the initial DELETE request with a 202 Accepted.
+2. The response headers **MUST** include a Location header that points to a URL where the ongoing operation can be monitored.
 3. **Optional:** The response headers may include an Azure-AsyncOperation header pointing to an Operation resource (as described below).
-4. If a provisioningState field is used for the resource, it **MUST** transition to a non-terminal state like &quot;Deleting&quot;
+4. If a provisioningState field is used for the resource, it **MUST** transition to a non-terminal state like &quot;Deleting&quot;.
 5. If the DELETE completes successfully, the URL that was returned in the Location header **MUST** now return a 200 OK or 204 NoContent to indicate success and the resource **MUST** disappear.
+
+The DELETE operation should return 404 if the object does not exist, AND there is no ongoing operation that would change that state. The DELETE operation may (but is not required to) return 200 OK or 204 No Content for cases when the operation can be finished in a timely fashion, such as when the user is deleting a resource for which there is no cleanup necessary.
+
+The RFC7231 dictates that DELETE must be idempotent and the client might be retrying from a network or client-side error. In order to increase odds of success, the server should avoid starting the operation again if it already started. This can be performed by checking if there is already an ongoing DELETE operation. If yes, the server should not start a new asynchronous operation. Instead it may immediately return 202 Accepted, with the same or compatible values in the Location header and in the optional Azure-AsyncOperation header of the initial DELETE request. It is valid to give same polling URIs to different clients, provided they requested the same operation.
+
+If the server receives a DELETE request while there is an ongoing PUT or PATCH operation, the server should return 409 Conflict immediately.
 
 ## Call Action POST Asynchronously ##
 
 The API flow for POST {resourceUrl}/{action} should be:
 
-1. Respond to the initial POST request with a 202 Accepted
-2. The response headers **MUST** include a Location header that points to a URL where the ongoing operation can be monitored
+1. Respond to the initial POST request with a 202 Accepted.
+2. The response headers **MUST** include a Location header that points to a URL where the ongoing operation can be monitored.
 3. **Optional:** The response headers may include an Azure-AsyncOperation header pointing to an Operation resource (as described below).
 4. If the POST completes successfully, the URL that was returned in the Location header **MUST** now return what would have been a successful response if the API completed (e.g. a response body / header / status code). It is acceptable for this to be a 200/204 NoContent if the action does not require a response (e.g. restarting a VM).
+
+The POST operation may (but is not required to) return 200 OK if the server can finish in a timely fashion.
+
+There is no need for POST to be idempotent, but the server may avoid starting the operation again if it already started, to increase odds of success. This can be performed by comparing the content of POST request with the goal state of the ongoing operation. If it matches, the server may immediately return 202 Accepted, with the same or compatible values in the Location header and in the optional Azure-AsyncOperation header of the initial PUT request. It is valid to give same polling URIs to different clients, provided they requested the same operation.
+
+The POST operation should return 409 Conflict if there is an ongoing operation with a different goal state. POST should also return 409 Conflict if there is an ongoing DELETE operation.
 
 ## ProvisioningState property ##
 
