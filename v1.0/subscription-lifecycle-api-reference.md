@@ -31,6 +31,10 @@ This API uses the &quot;system&quot; version of 2.0 because it can be triggered 
 		"tenantId": "ac430efe-1866-4124-9ed9-ee67f9cb75db",
 		"locationPlacementId": "Internal_2014-09-01",
 		"quotaId": "Default_2014-09-01",
+		"accountOwner": {
+		      "puid": "xxxxxxxxxxxxx",
+		      "email": "xxxx@xxx.xxxx"
+		    },
 		"registeredFeatures": [
 			{
 				"name": "<featureName>",
@@ -50,8 +54,6 @@ This API uses the &quot;system&quot; version of 2.0 because it can be triggered 
 				}
 			]
 		},
-		"subscriptionSpendingLimit": "True",
-		"subscriptionAccountOwner": "account@company.com",
 		"managedByTenants": [
 			{
 				"tenantId": "<managedByTenantId>"
@@ -73,10 +75,9 @@ This API uses the &quot;system&quot; version of 2.0 because it can be triggered 
 | **properties.tenantId** | Optional.The AAD directory/tenant to which the subscription belongs. |
 | **properties.locationPlacementId** | Optional.The placement requirement for the subscription based on its country of origin / offer type / offer category / etc. This is used in geo-fencing of certain regions or regulatory boundaries (e.g. Australia ring-fencing). |
 | **properties.quotaId** | Optional.The quota requirement for the subscription based on the offer type / category (e.g. free vs. pay-as-you-go). This can be used to inform quota information for the subscription (e.g. max # of resource groups or max # of virtual machines. |
+| **properties.accountOwner** | Required. AccountOwner bag, which contains the PUID and email of the account owner. |
 | **properties.registeredFeatures** | Optional.All AFEC features that the subscriptions has been registered under RP namespace and platform namespace (Microsoft.Resources).  Null or an empty array would mean that there are no registered features for the given subscription. |
-| **properties.availabilityZones** | Optional.Physical to logical zone mapping. This mapping will be per location (region). |
-| **properties.subscriptionSpendingLimit** | Boolean for subscription spending limit. |
-| **Properties.subscriptionAccountOwner** | String for Account owner. |
+| **properties.availabilityZones** | Optional. Physical to logical zone mapping. This mapping will be per location (region). Optionally shared with RPs based on if they have any Zonal resources exposed in their manifest through an availabilityZoneRule. |
 | **properties.managedByTenants** | Optional.All tenants managing the subscription. Null or empty means that there are no managing tenants. |
 | **properties.additionalProperties** | Required. AdditionalProperty bag, which is a dictionary of JTokens. More details can be found below. |
 
