@@ -128,41 +128,116 @@ For resources that implement data encryption and allow the customer to specify t
 
 ```
 {
-  "id": "/subscriptions/{id}/resourceGroups/{group}/providers/{rpns}/{type}/{name}",
-  "name": "{name}",
-  "type": "{resourceProviderNamespace}/{resourceType}",
-  "location": "North US",
-   "systemData":{
-      "createdBy": "<string>",
-      "createdByType": "<User|Application|ManagedIdentity|Key>",
-      "createdAt": "<date-time>",
-      "lastModifiedBy": "<string>",
-      "lastModifiedByType": "<User|Application|ManagedIdentity|Key>",
-      "lastModifiedAt": "<date-time>"
-  },
-  "tags": {
-    "key1": "value 1",
-    "key2": "value 2"
-  },
-  "kind": "resource kind",
-  "properties": {
-   "encryption": {
-      "status": "enabled",
-      "keyVaultProperties": {
-        "keyIdentifier": "string",
-        "identityClientId": "string"
-      }
-    },
-    "comment": "Resource defined structure"
-  }
+    "encryption": {
+        "type": "object",
+        "metadata": {
+            "description": "All encryption configuration for a resource."
+        },
+        "subProperties": {
+            "enabled": {
+                "type": bool,
+                "metadata": {
+"description": "(Optional) Discouraged to include in resource definition. Only needed where it is possible to disable platform (AKA infrastructure) encryption. Azure SQL TDE is an example of this.”
+                }
+            }
+            "CmkEncryption": {
+                "type": "object",
+                "metadata": {
+"description":"All CMK (customer managed keys) encryption properties for the resource."
+                },
+                "subProperties": {
+                    "KekIdentity": {
+                        "type": "object",
+                        "metadata": {
+"description":"All identity configuration for CMK defining which identity should be used to auth to Key Vault."
+                        },
+                        "subProperties": {
+                            "useSystemAssignedIdentity": {
+                                "type": bool,
+                                "metadata": {
+"description": "If true, will use system assigned for CMK operations. Mutually exclusive with userAssignedIdentity”
+                                }
+                            },
+                            "userAssignedIdentity": {
+                                "type": "string",
+                                "defaultValue": "",
+                                "metadata": {
+"description": "user assigned identity to use for accessing key encryption key Url. Ex: /subscriptions/fa5fc227-a624-475e-b696-cdd604c735bc/resourceGroups/<resource group>/providers/Microsoft.ManagedIdentity/userAssignedIdentities/myId. Mutually exclusive with useSystemAssignedIdentity.”
+                                }
+                            }
+                        }
+                    },
+                    "KekUrl": {
+                        "type": "string",
+                        "defaultValue": "",
+                        "metadata": {
+"description": "key encryption key Url, versioned or unversioned. Ex: https://contosovault.vault.azure.net/keys/contosokek/562a4bb76b524a1493a6afe8e536ee78 or https://contosovault.vault.azure.net/keys/contosokek"
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 ```
 
 ### Properties ###
 | Name  | Description |
 | ------------- | ------------- |
-| status  | Enable or disable encryption. Do not include if encryption is mandatory. |
-| keyVaultProperties.keyIdentifier  | Key vault uri to access the encryption key  |
-| keyVaultProperties.identityClientId | The client id of the identity which will be used to access key vault  |
+| enabled  | It is preferred to make infrastructure or platform encryption mandatory, but if included this enables or disables infrastructure or platform encryption. |
+| CmkEncryption.KekUrl  | Key vault uri to access the encryption key  |
+| CmkEncryption.KekVaultResourceId  | Key vault resource id to access the key vault  |
+| CmkEncryption.KekIdentity.useSystemAssignedIdentity | bool. If true, will use the system assigned for CMK operations. Mutually exclusive with userAssignedIdentity  |
+| CmkEncryption.KekIdentity.userAssignedIdentity | The the User Assigned resource id of the identity which will be used to access key vault  |
 
 On PUT/PATCH of a new key, the provider is expected to implement key rotation for the encrypted data. 
+
+Error cases:
+-	useSystemAssignedIdentity == TRUE and userAssignedIdentity != NULL
+-	enabled == FALSE but KekUrl is set as infrastructure encryption is needed to support CMK.
+
+### State Change Table ###
+The following sample ARM requests depict the expected state changes and service behavior.
+
+#### Partial Patch – Service-Assigned to User-Assigned Managed Identity ####
+```
+{
+    "encryption": {
+        "CmkEncryption": {
+            "KekIdentity": {
+                "useSystemAssignedIdentity": false,
+                "userAssignedIdentity": "UA resource id"
+            }
+        }
+    }
+} 
+```
+
+#### Partial Patch – User-Assigned to Service-Assigned Managed Identity ####
+```
+{
+    "encryption": {
+        "CmkEncryption": {
+            "KekIdentity": {
+                "useSystemAssignedIdentity": true,
+                "userAssignedIdentity": null
+            }
+        }
+    }
+}
+```
+
+#### Partial Patch - Default Identity ####
+```
+{
+    "encryption": {
+        "CmkEncryption": {
+            "KekIdentity": {
+                "useSystemAssignedIdentity": false,
+                "userAssignedIdentity": null
+            }
+        }
+    }
+}
+```
+
